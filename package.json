@@ -1,0 +1,44 @@
+{
+  "name": "shop_ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "npm rebuild better-sqlite3",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "feed:fetch": "tsx scripts/fetch-2performant-feed.ts",
+    "catalog:update": "node --import tsx run_update.ts",
+    "catalog:stream-db": "node --import tsx scripts/stream-feed-to-db.ts",
+    "db:seed": "node --import tsx scripts/seed-sample-data.ts",
+    "db:verify": "node --import tsx scripts/verify-db.ts",
+    "test:search": "node --import tsx scripts/test-search.ts",
+    "chat:agent": "python scripts/agentic_chat/main.py"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "fast-xml-parser": "^4.5.0",
+    "lucide-react": "^1.14.0",
+    "next": "^15.0.0",
+    "pg": "^8.20.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sax": "^1.6.0",
+    "swr": "^2.4.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/sax": "^1.2.7",
+    "autoprefixer": "^10.5.0",
+    "dotenv": "^16.4.0",
+    "postcss": "^8.5.12",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,4 @@
+# Agent REPL: DeepSeek (OpenAI SDK) + Postgres/pgvector + embeddings OpenAI
+openai>=1.40,<2
+psycopg2-binary>=2.9,<3
+pgvector>=0.3,<1

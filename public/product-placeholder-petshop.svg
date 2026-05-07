@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640" fill="none" aria-hidden="true">
+  <rect width="640" height="640" fill="#f4f4f5"/>
+  <circle cx="320" cy="280" r="120" fill="#e4e4e7"/>
+  <ellipse cx="320" cy="420" rx="160" ry="90" fill="#d4d4d8"/>
+  <text x="320" y="560" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="28" fill="#71717a">Petshop</text>
+</svg>

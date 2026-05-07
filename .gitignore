@@ -1,0 +1,17 @@
+node_modules
+.next
+.env
+.env.local
+.env*.local
+out
+*.tsbuildinfo
+data/admin-state.json
+data/conversations.json
+data/clicks.json
+data/produse_esentiale.json
+data/produse_esentiale.json.tmp
+data/catalog.db
+data/catalog.db-shm
+data/catalog.db-wal
+data/uploads/*
+!data/uploads/.gitkeep
