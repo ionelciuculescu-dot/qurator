@@ -1,7 +1,7 @@
 import type { EssentialProduct } from "@/shared/models/product";
 
 /** Valori `niche_type` / `feed_configs.niche` persistate la import XML. */
-export type CatalogNicheOverride = "petshop" | "it" | "tech" | "generic";
+export type CatalogNicheOverride = "petshop" | "it" | "tech" | "generic" | "bricolaj";
 
 /**
  * Elimină diacriticele (Unicode NFD) + lowercase — potrivire stabilă pentru
@@ -61,7 +61,7 @@ export function passesSamsungOrPetshopFilter(
   opts?: CatalogVerticalFilterOpts
 ): boolean {
   const cn = opts?.catalogNiche;
-  if (cn === "petshop" || cn === "it" || cn === "tech" || cn === "generic") return true;
+  if (cn === "petshop" || cn === "it" || cn === "tech" || cn === "generic" || cn === "bricolaj") return true;
   if (opts?.fromManagedFeedConfig) return true;
 
   if (feedUrl && isLikelyPetshopFeedUrl(feedUrl)) return true;
@@ -97,6 +97,7 @@ export function inferCategoryHint(title: string, niche: CatalogNicheOverride, fe
   }
   if (niche === "tech") return "Tech";
   if (niche === "generic") return "Generic";
+  if (niche === "bricolaj") return "Bricolaj";
   const t = foldAsciiLower(title);
   if (/phone|telefon|galaxy|smartphone|mobile/.test(t)) return "Telefoane";
   return "IT";

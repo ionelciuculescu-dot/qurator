@@ -1,24 +1,21 @@
 import { verifyAdminRequest } from "@/lib/adminAuth";
 import { recordFeedRefresh } from "@/lib/adminStore";
 import { getFeedConfigById } from "@/lib/feedConfigsDb";
+import { buildAppPgPoolConfig } from "@/lib/pgPoolConfig";
 import { streamFeedFromFeedConfig } from "@/ingestion/catalog/sync-feed-from-config";
-import Database from "better-sqlite3";
+import { Pool } from "pg";
 import { NextRequest, NextResponse } from "next/server";
-
-import { catalogSqliteFilePath } from "@/shared/db/catalog-sqlite-path";
-import { CATALOG_PRODUCTS_TABLE } from "@/shared/sql/catalog-queries";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-function totalProductCount(): number {
-  const db = new Database(catalogSqliteFilePath(), { readonly: true });
-  db.pragma("busy_timeout = 15000");
+async function totalProductCountPostgres(): Promise<number> {
+  const pool = new Pool(buildAppPgPoolConfig({ max: 2 }));
   try {
-    const row = db.prepare(`SELECT COUNT(*) AS c FROM ${CATALOG_PRODUCTS_TABLE}`).get() as { c: number };
-    return Number(row.c);
+    const r = await pool.query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM public.products`);
+    return parseInt(r.rows[0]?.c ?? "0", 10) || 0;
   } finally {
-    db.close();
+    await pool.end().catch(() => {});
   }
 }
 
@@ -31,14 +28,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!Number.isFinite(id) || id <= 0) {
     return NextResponse.json({ error: "ID invalid" }, { status: 400 });
   }
-  const row = getFeedConfigById(id);
+  const row = await getFeedConfigById(id);
   if (!row) {
     return NextResponse.json({ error: "Feed inexistent" }, { status: 404 });
   }
   /** Sync manual din admin: permis și pentru feed inactiv (CLI rămâne doar cu `is_active=1`). */
   try {
     const result = await streamFeedFromFeedConfig(row);
-    const total = totalProductCount();
+    const total = await totalProductCountPostgres();
     await recordFeedRefresh({
       ok: true,
       productCount: total,

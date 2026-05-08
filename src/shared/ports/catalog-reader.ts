@@ -13,16 +13,21 @@ export type CatalogListOptions = {
    * **Lipsă** → nu se aplică `filterPetshopProductsBySpeciesIntent` pe candidați petshop.
    */
   speciesSqlAnchor?: "caine" | "pisica";
+  /**
+   * Nișă „mall raion” din UI: restrânge SQL la `niche_type` exact (lowercase), dacă valoarea e în lista permisă
+   * (`PG_VECTOR_ALLOWED_NICHES` / implicite). Folosit de `PostgresCatalogReader` (vector + fallback token).
+   */
+  activeMallNiche?: string;
 };
 
 /**
  * Port citire catalog pentru modulul `sales`.
- * Implementări: ex. `JsonCatalogReader` (ingestion), `SqliteCatalogReader` (sales/adapters) — legate la rute.
+ * Implementări: ex. `JsonCatalogReader` (ingestion), `PostgresCatalogReader` (sales/adapters) — legate la rute.
  */
 export type CatalogReader = {
   listProducts(options?: CatalogListOptions): Promise<ParsedProduct[]>;
   /**
-   * Opțional: subset de candidați pentru interogare (ex. SQLite cu OR pe tokeni),
+   * Opțional: subset de candidați pentru interogare (ex. OR pe tokeni în SQL),
    * înainte de `buildChatProductContext` / `productMatchesKeywordQuery`.
    */
   listProductsMatchingQuery?(query: string, options?: CatalogListOptions): Promise<ParsedProduct[]>;

@@ -194,7 +194,15 @@ export async function getAdminLiveFeed(limit = 20): Promise<AdminFeedRow[]> {
   const clickedConv = new Set(
     clicks.map((c) => c.conversationId).filter((id): id is string => typeof id === "string" && id.length > 0)
   );
-  const rows = [...conv.entries].reverse().slice(0, limit);
+  const newestFirst = [...conv.entries].reverse();
+  const seenIds = new Set<string>();
+  const rows: typeof conv.entries = [];
+  for (const r of newestFirst) {
+    if (seenIds.has(r.id)) continue;
+    seenIds.add(r.id);
+    rows.push(r);
+    if (rows.length >= limit) break;
+  }
   return rows.map((r) => {
     let status: AdminFeedRow["status"] = "—";
     if (r.recommendationGenerated) {

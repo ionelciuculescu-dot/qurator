@@ -1,4 +1,4 @@
--- Init PostgreSQL + pgvector: catalog (echivalent SQLite din `catalog-schema-ddl.ts`)
+-- Init PostgreSQL + pgvector: catalog produse + sesiuni
 -- + câmpuri AI (description_clean, tags, embedding).
 -- Rulează într-o bază cu extensia pgvector instalată (ex. `CREATE EXTENSION` din superuser).
 
@@ -33,6 +33,8 @@ DROP TABLE IF EXISTS products;
 -- `title` în ghid ≈ `name` aici (nume produs); index GIN pe același câmp.
 CREATE TABLE products (
   id SERIAL PRIMARY KEY,
+  external_id TEXT UNIQUE,
+  content_hash TEXT NOT NULL DEFAULT '',
   provider_id TEXT NOT NULL DEFAULT 'generic',
   feed_id INTEGER REFERENCES feed_configs (id) ON DELETE SET NULL,
   name TEXT NOT NULL DEFAULT '',

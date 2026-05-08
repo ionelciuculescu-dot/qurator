@@ -4,9 +4,9 @@ import type { EssentialProduct } from "@/shared/models/product";
 import type { CatalogNicheOverride } from "@/ingestion/catalog/niche-filters";
 import { essentialFromBravapetProductFlat } from "@/ingestion/providers/bravapet-provider";
 
-import { streamFeedUrlToCatalogDb, type StreamFeedToCatalogDbResult } from "./stream-to-db";
+import { streamFeedUrlToSupabase, type StreamFeedToSupabaseResult } from "./stream-to-supabase";
 
-/** Rând `feed_configs` din SQLite. */
+/** Rând `public.feed_configs` (Postgres / Supabase). */
 export type FeedConfigRow = {
   id: number;
   name: string;
@@ -24,29 +24,33 @@ export function flatMapperForStoredProvider(
   return essentialFromFlat;
 }
 
-/**
- * Mapează `feed_configs.niche` → override pentru `products.niche_type` la import XML.
- * `auto` / necunoscut → inferență din conținut (`inferNicheTypeForCatalog`).
- */
 function catalogNicheFromFeedRow(niche: string): CatalogNicheOverride | undefined {
   const n = niche.trim().toLowerCase();
   if (n === "auto" || n === "") return undefined;
-  if (n === "petshop" || n === "it" || n === "tech" || n === "generic") {
+  if (n === "petshop" || n === "it" || n === "tech" || n === "generic" || n === "bricolaj") {
     return n;
   }
   return undefined;
 }
 
-/** Stream un feed după config DB (URL, provider, nișă, feed_id). */
+/** Stream un feed după config (URL, provider, nișă, feed_id) → Postgres/Supabase + embedding. */
 export async function streamFeedFromFeedConfig(
   row: FeedConfigRow,
   init?: RequestInit
-): Promise<StreamFeedToCatalogDbResult> {
+): Promise<StreamFeedToSupabaseResult> {
   const pid = row.provider_id.trim() || "generic";
-  return streamFeedUrlToCatalogDb(row.url, init, {
+  return streamFeedUrlToSupabase(row.url, init, {
     providerId: pid,
     flatToEssential: flatMapperForStoredProvider(pid),
     feedId: row.id,
     catalogNiche: catalogNicheFromFeedRow(row.niche),
   });
+}
+
+/** Alias explicit pentru scripturi / API care menționează Supabase. */
+export async function streamFeedFromFeedConfigToSupabase(
+  row: FeedConfigRow,
+  init?: RequestInit
+): Promise<StreamFeedToSupabaseResult> {
+  return streamFeedFromFeedConfig(row, init);
 }

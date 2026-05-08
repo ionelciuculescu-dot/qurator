@@ -1,4 +1,4 @@
-import { streamFeedUrlToCatalogDb } from "@/ingestion/catalog/stream-to-db";
+import { streamFeedUrlToSupabase } from "@/ingestion/catalog/stream-to-supabase";
 
 import { BaseFeedProvider } from "./base-provider";
 
@@ -11,7 +11,7 @@ export class GenericFeedProvider extends BaseFeedProvider {
   }
 
   async sync(url: string, init?: RequestInit) {
-    return streamFeedUrlToCatalogDb(url, init, {
+    return streamFeedUrlToSupabase(url, init, {
       providerId: this.providerId,
     });
   }

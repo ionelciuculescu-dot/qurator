@@ -11,12 +11,18 @@ export type SearchStockToolResult = {
   error?: string;
 };
 
+export type SearchStockRequestContext = {
+  /** Din corpul `POST /api/chat` (mall raion) — restrânge `niche_type` în Postgres. */
+  activeMallNiche?: string | null;
+};
+
 /**
  * Execută tool-ul `search_stock`: parsează JSON-ul din `function.arguments` și apelează căutarea hibridă.
  */
 export async function executeSearchStockTool(
   reader: PostgresCatalogReader,
-  argumentsJson: string
+  argumentsJson: string,
+  requestContext?: SearchStockRequestContext
 ): Promise<SearchStockToolResult> {
   let args: unknown;
   try {
@@ -48,6 +54,7 @@ export async function executeSearchStockTool(
       priceMin,
       priceMax,
       limit: parsedLimit,
+      activeMallNiche: requestContext?.activeMallNiche?.trim() || undefined,
     });
     const products = raw.map(cleanParsedProductForLLM);
     return { ok: true, count: products.length, products, rawProducts: raw };

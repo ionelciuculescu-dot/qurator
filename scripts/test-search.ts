@@ -1,7 +1,7 @@
 /**
- * Caută un produs după nume în SQLite (`products.name`).
- * 1) Potrivire strictă `name = ?`
- * 2) Dacă nu e nimic: `TRIM(name) = TRIM(?)` (același string căutat)
+ * Caută un produs după nume în Postgres (`public.products.name`).
+ * 1) Potrivire strictă `name = $1`
+ * 2) Dacă nu e nimic: `TRIM(name) = TRIM($1)`
  *
  * Dacă apare rândul → datele sunt în catalog; problema e probabil în Sales / AI, nu în Ingestion.
  *
@@ -9,21 +9,23 @@
  *   npx tsx scripts/test-search.ts -- "Nume Exact Produs"
  *   npm run test:search -- "Nume Exact Produs"
  */
-import Database from "better-sqlite3";
 import { resolve } from "node:path";
 import { config } from "dotenv";
+import { Pool } from "pg";
 
-import { catalogSqliteFilePath } from "../src/shared/db/catalog-sqlite-path";
+import { buildAppPgPoolConfig, requirePgEnvConfigured } from "../src/lib/pgPoolConfig";
 import { CATALOG_PRODUCTS_TABLE } from "../src/shared/sql/catalog-queries";
 
 const root = process.cwd();
 config({ path: resolve(root, ".env.local") });
 config({ path: resolve(root, ".env") });
 
+const TABLE = `public.${CATALOG_PRODUCTS_TABLE}`;
+
 type ProductRow = {
-  id: number;
+  id: string;
   provider_id: string;
-  feed_id: number | null;
+  feed_id: string | null;
   name: string;
   brand: string;
   price: string;
@@ -40,7 +42,7 @@ function needleFromArgv(): string {
   return parts.join(" ").trim();
 }
 
-function main() {
+async function main() {
   const needle = needleFromArgv();
   if (!needle) {
     console.error(
@@ -50,13 +52,13 @@ function main() {
     process.exit(1);
   }
 
-  const dbPath = catalogSqliteFilePath();
-  const db = new Database(dbPath, { readonly: true });
+  requirePgEnvConfigured();
+  const pool = new Pool(buildAppPgPoolConfig({ max: 2 }));
 
   const cols = [
-    "id",
+    "id::text AS id",
     "provider_id",
-    "feed_id",
+    "feed_id::text AS feed_id",
     "name",
     "brand",
     "price",
@@ -69,16 +71,21 @@ function main() {
 
   try {
     let mode = "name = ? (exact)";
-    let rows = db.prepare(`SELECT ${cols} FROM ${CATALOG_PRODUCTS_TABLE} WHERE name = ?`).all(needle) as ProductRow[];
+    let rows = (
+      await pool.query<ProductRow>(`SELECT ${cols} FROM ${TABLE} WHERE name = $1`, [needle])
+    ).rows;
 
     if (rows.length === 0) {
       mode = "TRIM(name) = TRIM(?)";
-      rows = db
-        .prepare(`SELECT ${cols} FROM ${CATALOG_PRODUCTS_TABLE} WHERE TRIM(name) = TRIM(?)`)
-        .all(needle) as ProductRow[];
+      rows = (
+        await pool.query<ProductRow>(
+          `SELECT ${cols} FROM ${TABLE} WHERE TRIM(name) = TRIM($1)`,
+          [needle]
+        )
+      ).rows;
     }
 
-    console.log(`Fișier DB: ${dbPath}`);
+    console.log(`Tabel: ${TABLE}`);
     console.log(`String căutat: ${JSON.stringify(needle)}`);
     console.log(`Mod potrivire: ${mode}\n`);
 
@@ -94,7 +101,9 @@ function main() {
     if (mode.includes("TRIM")) {
       console.log("Notă: potrivirea strictă a eșuat; s-a folosit TRIM — compară `name` din DB cu stringul tău.\n");
     } else {
-      console.log("→ SQLite returnează produsul; dacă AI-ul nu-l folosește, verifică Sales (build context, limită, keyword).\n");
+      console.log(
+        "→ Postgres returnează produsul; dacă AI-ul nu-l folosește, verifică Sales (build context, limită, keyword).\n"
+      );
     }
 
     for (let i = 0; i < rows.length; i++) {
@@ -110,16 +119,23 @@ function main() {
       console.log(`  price:         ${r.price}`);
       console.log(`  category:      ${r.category}`);
       console.log(`  niche_type:    ${r.niche_type}`);
-      console.log(`  affiliate_url: ${(r.affiliate_url ?? "").slice(0, 120)}${(r.affiliate_url ?? "").length > 120 ? "…" : ""}`);
-      console.log(`  image_url:     ${(r.image_url ?? "").slice(0, 100)}${(r.image_url ?? "").length > 100 ? "…" : ""}`);
+      console.log(
+        `  affiliate_url: ${(r.affiliate_url ?? "").slice(0, 120)}${(r.affiliate_url ?? "").length > 120 ? "…" : ""}`
+      );
+      console.log(
+        `  image_url:     ${(r.image_url ?? "").slice(0, 100)}${(r.image_url ?? "").length > 100 ? "…" : ""}`
+      );
       console.log(`  description:   ${descShort || "(gol)"}`);
       console.log("");
     }
 
     process.exit(0);
   } finally {
-    db.close();
+    await pool.end().catch(() => {});
   }
 }
 
-main();
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

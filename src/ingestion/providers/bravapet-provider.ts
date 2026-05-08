@@ -1,6 +1,6 @@
 import type { EssentialProduct } from "@/shared/models/product";
 
-import { streamFeedUrlToCatalogDb } from "@/ingestion/catalog/stream-to-db";
+import { streamFeedUrlToSupabase } from "@/ingestion/catalog/stream-to-supabase";
 import {
   MAX_DESCRIPTION_OUT,
   MAX_IMAGE_URL,
@@ -101,7 +101,7 @@ export class BravapetFeedProvider extends BaseFeedProvider {
   }
 
   async sync(url: string, init?: RequestInit) {
-    return streamFeedUrlToCatalogDb(url, init, {
+    return streamFeedUrlToSupabase(url, init, {
       providerId: this.providerId,
       flatToEssential: essentialFromBravapetProductFlat,
     });

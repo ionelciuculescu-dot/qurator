@@ -1,6 +1,8 @@
 /** Opțiuni pentru handler-ul chat (cookie sesiune etc.). */
 export type HandleChatOptions = {
   requestCookieHeader?: string | null;
+  /** Din corpul cererii (ruta poate seta explicit); prioritar față de câmpul omolog din body dacă ambele există. */
+  activeMallNiche?: string | null;
 };
 
 /** Mesaj din istoricul conversației (fără mesajul curent al userului — acela e în `message`). */
@@ -28,6 +30,11 @@ export type ChatRequestBody = {
   sessionId?: string;
   /** Identificator stabil per conversație pentru loguri și `appendConversationIdToClickLinks`. */
   conversationId?: string;
+  /**
+   * Nișă activă (mall raion) pentru `search_stock`: filtrează pe `products.niche_type` în Postgres.
+   * Aliasuri acceptate la parsare: `niche`, `mallNiche` (vezi `parseChatBody`).
+   */
+  activeMallNiche?: string;
 };
 
 /** Produs pentru carduri în UI (chat) — aliniat la `ParsedProduct` / PG (`image` ← image_url, `affiliateLink` ← affiliate_url). */

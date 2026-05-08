@@ -87,7 +87,7 @@ export function pickFirst(f: Record<string, string>, keys: string[]): string {
 
 /**
  * Extrage primul număr rezonabil din textul de preț (ex. `63.04`, `63,04 RON`, `pret: 63,04`)
- * și îl normalizează ca string cu punct zecimal (compatibil JSON / SQLite).
+ * și îl normalizează ca string cu punct zecimal (compatibil JSON / DB).
  */
 export function normalizePriceFromFlat(raw: string): string {
   const t = raw.trim();

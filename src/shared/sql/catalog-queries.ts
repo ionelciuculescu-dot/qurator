@@ -1,5 +1,5 @@
 /**
- * Interogări SQL portabile (fără funcții specifice SQLite), aliniate la PostgreSQL / Supabase.
+ * Interogări SQL portabile, aliniate la PostgreSQL / Supabase.
  * Evităm: datetime('now'), AUTOINCREMENT în SELECT, tipuri non-standard în expresii.
  *
  * La migrare PG: înlocuiește numele schemei dacă e cazul (`public.products`) și păstrează aceleași aliasuri de coloane.
@@ -25,7 +25,7 @@ export const CATALOG_PRODUCT_COLUMNS = [
 ] as const;
 
 /**
- * Toate produsele, ordonate stabil după `id` (index-friendly în PG și SQLite).
+ * Toate produsele, ordonate stabil după `id` (index-friendly în PG).
  */
 export function sqlSelectAllProductsByIdAsc(): string {
   const cols = CATALOG_PRODUCT_COLUMNS.join(", ");

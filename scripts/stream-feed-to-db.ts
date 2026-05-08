@@ -1,9 +1,9 @@
 /**
- * Stream feed-uri XML → SQLite (Samsung + Petshop). `npm run catalog:stream-db`
+ * Stream feed-uri XML → Postgres / Supabase (`public.products`). `npm run catalog:stream-db`
  *
  * Ordine surse URL-uri:
  * 1. Argumente CLI (`npm run catalog:stream-db -- https://a.xml …`)
- * 2. Dacă există rânduri **active** în `feed_configs` (tabel SQLite) → sync din admin / DB
+ * 2. Dacă există rânduri **active** în `public.feed_configs` (Postgres) → sync din admin
  * 3. Altfel `.env.local`: `CATALOG_FEED_URLS` sau `TWO_PERFORMANT_FEED_URL` (virgulă + trim)
  *
  * Gestionare feed-uri: `/admin/feeds`
@@ -65,12 +65,12 @@ async function main() {
     return;
   }
 
-  if (countFeedConfigs() > 0) {
-    const active = listActiveFeedConfigs();
+  if ((await countFeedConfigs()) > 0) {
+    const active = await listActiveFeedConfigs();
     if (active.length > 0) {
-      console.log(
-        `[stream-feed-to-db] Sursă: feed_configs (SQLite) | ${active.length} feed(uri) active`
-      );
+        console.log(
+          `[catalog:stream] Sursă: public.feed_configs (Postgres) | ${active.length} feed(uri) active`
+        );
       const totals = {
         totalEssentialMatched: 0,
         afterFilterWritten: 0,
@@ -92,18 +92,18 @@ async function main() {
         );
         console.log(`--- FINALIZAT IMPORT: ${hostname} ---`);
       }
-      console.log("[stream-feed-to-db] Total agregat:", JSON.stringify(totals, null, 2));
+      console.log("[catalog:stream] Total agregat:", JSON.stringify(totals, null, 2));
       return;
     }
     console.log(
-      "[stream-feed-to-db] Există feed_configs dar niciunul activ — folosesc variabilele de mediu dacă există."
+      "[catalog:stream] Există feed_configs dar niciunul activ — folosesc variabilele de mediu dacă există."
     );
   }
 
   const fromEnv = parseUrlsFromEnv();
   if (fromEnv.length === 0) {
-    const nCfg = countFeedConfigs();
-    const nActive = nCfg > 0 ? listActiveFeedConfigs().length : 0;
+    const nCfg = await countFeedConfigs();
+    const nActive = nCfg > 0 ? (await listActiveFeedConfigs()).length : 0;
     const hintInactive =
       nCfg > 0 && nActive === 0
         ? "\n  • Există feed_configs dar niciunul nu e activ — bifează „Activ” sau adaugă un feed activ în `/admin/feeds`.\n"
@@ -123,7 +123,7 @@ async function main() {
 
 async function runUrlList(urls: string[], source: string) {
   console.log(
-    `[stream-feed-to-db] Sursă: ${source} | ${urls.length} URL(uri) după parsare:`,
+    `[catalog:stream] Sursă: ${source} | ${urls.length} URL(uri) după parsare:`,
     urls.map((u) => feedHostname(u)).join(", ")
   );
   const totals = {
@@ -147,7 +147,7 @@ async function runUrlList(urls: string[], source: string) {
     );
     console.log(`--- FINALIZAT IMPORT: ${hostname} ---`);
   }
-  console.log("[stream-feed-to-db] Total agregat:", JSON.stringify(totals, null, 2));
+  console.log("[catalog:stream] Total agregat:", JSON.stringify(totals, null, 2));
 }
 
 main().catch((e) => {

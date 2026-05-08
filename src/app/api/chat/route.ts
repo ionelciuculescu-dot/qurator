@@ -6,6 +6,14 @@ import { randomUUID } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 
+/** Nișă mall din corpul JSON (`activeMallNiche`, `niche` sau `mallNiche`) — pasată la `search_stock` / Postgres `niche_type`. */
+function activeMallNicheFromChatBody(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const v = o.activeMallNiche ?? o.niche ?? o.mallNiche;
+  return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
 let postgresCatalogReader: PostgresCatalogReader | undefined;
 
 function getPostgresCatalogReader(): PostgresCatalogReader {
@@ -19,6 +27,7 @@ export async function POST(req: Request) {
   const raw = await req.json().catch(() => null);
   const res = await handleChatFromParsed(raw, () => getPostgresCatalogReader(), {
     requestCookieHeader: req.headers.get("cookie"),
+    activeMallNiche: activeMallNicheFromChatBody(raw),
   });
 
   if (res.ok && raw && typeof raw === "object") {

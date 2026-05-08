@@ -85,12 +85,20 @@ function parseChatBody(body: unknown): ChatRequestBody | null {
     if (/^[a-zA-Z0-9_-]{8,128}$/.test(t)) sessionId = t;
   }
   const history = parseHistoryFromBody(o.history);
+
+  let activeMallNiche: string | undefined;
+  const nicheRaw = o.activeMallNiche ?? o.niche ?? o.mallNiche;
+  if (typeof nicheRaw === "string" && nicheRaw.trim()) {
+    activeMallNiche = nicheRaw.trim();
+  }
+
   return {
     message: message.trim(),
     ...(q ? { query: q } : {}),
     ...(history ? { history: tailHistory(history) } : {}),
     ...(priorMessageCount !== undefined ? { priorMessageCount } : {}),
     ...(sessionId ? { sessionId } : {}),
+    ...(activeMallNiche ? { activeMallNiche } : {}),
   };
 }
 
@@ -175,14 +183,14 @@ function buildUnifiedVitrinaUserMessage(products: ParsedProduct[], shortIds: str
 export async function handleChatAgenticFromParsed(
   raw: unknown,
   getCatalogReader: () => CatalogReader,
-  _options?: HandleChatOptions
+  options?: HandleChatOptions
 ): Promise<Response> {
   const parsed = parseChatBody(raw);
   if (!parsed) {
     return Response.json(
       {
         error:
-          "Body invalid. Aștept JSON: { message: string (nevid), query?, history?, priorMessageCount?, sessionId? }",
+          "Body invalid. Aștept JSON: { message: string (nevid), query?, history?, priorMessageCount?, sessionId?, activeMallNiche? | niche? | mallNiche? }",
       },
       { status: 400 }
     );
@@ -200,6 +208,9 @@ export async function handleChatAgenticFromParsed(
       { status: 503 }
     );
   }
+
+  const activeMallNicheForSearch =
+    options?.activeMallNiche?.trim() || parsed.activeMallNiche?.trim() || undefined;
 
   const prior = parsed.priorMessageCount ?? 0;
   const continuation =
@@ -273,7 +284,9 @@ export async function handleChatAgenticFromParsed(
 
       for (const tc of toolCalls) {
         if (tc.function.name === "search_stock") {
-          const toolResult = await executeSearchStockTool(reader, tc.function.arguments);
+          const toolResult = await executeSearchStockTool(reader, tc.function.arguments, {
+            activeMallNiche: activeMallNicheForSearch,
+          });
           if (toolResult.ok) {
             appendUniqueProducts(latestProducts, toolResult.rawProducts ?? []);
           }

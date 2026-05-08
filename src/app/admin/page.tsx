@@ -319,8 +319,8 @@ export default function AdminDashboardPage() {
                       </td>
                     </tr>
                   ) : (
-                    interactions.map((row) => (
-                      <tr key={row.id} className="transition hover:bg-white/[0.02]">
+                    interactions.map((row, i) => (
+                      <tr key={`${row.id}-${row.at}-${i}`} className="transition hover:bg-white/[0.02]">
                         <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-zinc-400">
                           {formatDate(row.at)}
                         </td>

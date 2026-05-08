@@ -1,5 +1,6 @@
-import { Pool, type PoolConfig } from "pg";
+import { Pool } from "pg";
 
+import { buildAppPgPoolConfig } from "@/lib/pgPoolConfig";
 import { LIST_PRODUCTS_MAX, LIST_PRODUCTS_PREFETCH_ROWS } from "@/shared/constants/limits";
 import { dedupeParsedProductsBySimilarTitle } from "@/shared/lib/catalog-product-dedupe";
 import { speciesDbLikeNeedles } from "@/shared/lib/catalog-species-db-needles";
@@ -9,10 +10,10 @@ import type { CatalogListOptions, CatalogReader } from "@/shared/ports/catalog-r
 import { CATALOG_PRODUCT_COLUMNS, CATALOG_PRODUCTS_TABLE } from "@/shared/sql/catalog-queries";
 
 import {
-  applySqliteNicheSpeciesFilters,
+  applyCatalogNicheSpeciesFilters,
   rowToParsedProduct,
   type CatalogProductRow,
-} from "./catalog-reader-sqlite";
+} from "./catalog-row-mapper";
 
 const EMBED_MODEL = "text-embedding-3-small";
 const EMBED_DIM = 1536;
@@ -27,22 +28,7 @@ function vectorMatchLimit(): number {
 }
 
 /** Nișe permise la căutare vectorială (siguranță). Suprascrie cu `PG_VECTOR_ALLOWED_NICHES=petshop,tech`. */
-const DEFAULT_ALLOWED_NICHES = ["petshop", "tech", "generic", "it", "auto"];
-
-function buildPgPoolConfig(): PoolConfig {
-  const url = process.env.DATABASE_URL?.trim();
-  if (url) {
-    return { connectionString: url, max: 8 };
-  }
-  return {
-    host: process.env.PGHOST ?? "localhost",
-    port: parseInt(process.env.PGPORT ?? "5432", 10),
-    user: process.env.PGUSER ?? "postgres",
-    password: process.env.PGPASSWORD ?? "password123",
-    database: process.env.PGDATABASE ?? "postgres",
-    max: 8,
-  };
-}
+const DEFAULT_ALLOWED_NICHES = ["petshop", "tech", "generic", "it", "auto", "bricolaj"];
 
 function allowedNichesForVectorSearch(): string[] {
   const raw = process.env.PG_VECTOR_ALLOWED_NICHES?.trim();
@@ -52,6 +38,21 @@ function allowedNichesForVectorSearch(): string[] {
   return list.map((s) => s.toLowerCase());
 }
 
+/**
+ * Predicate SQL pe coloana **`niche_type`** (TEXT). În `init_db.sql` / ingest, produsele nu au `niche_id`;
+ * „mall raion” = valoarea text `niche_type` (ex. petshop, tech).
+ */
+function appendNicheTypeSqlPredicate(params: unknown[], activeMallNiche?: string | null): string {
+  const allow = allowedNichesForVectorSearch();
+  const want = activeMallNiche?.trim().toLowerCase() ?? "";
+  if (want && allow.includes(want)) {
+    params.push(want);
+    return `LOWER(TRIM(COALESCE(niche_type, ''))) = $${params.length}::text`;
+  }
+  params.push(allow);
+  return `LOWER(TRIM(COALESCE(niche_type, ''))) = ANY($${params.length}::text[])`;
+}
+
 /** Intrare pentru `hybridAgentSearch` — aliniată la tool-ul `search_stock` (agentic). */
 export type HybridAgentSearchInput = {
   semanticQuery: string;
@@ -59,6 +60,8 @@ export type HybridAgentSearchInput = {
   priceMin?: number;
   priceMax?: number;
   limit?: number;
+  /** Din UI / corp cerere: restrânge la un singur `niche_type` dacă e în lista permisă. */
+  activeMallNiche?: string | null;
 };
 
 /**
@@ -89,13 +92,13 @@ function pgRowToCatalogProductRow(row: Record<string, unknown>): CatalogProductR
  * Conexiune: `DATABASE_URL` sau `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD` / `PGDATABASE`.
  * Căutare cu query: cosine distance (`<=>`) între `embedding` și vectorul întrebării (`generateEmbedding`),
  * fără prag maxim pe distanță — doar top-K (`PG_VECTOR_MATCH_LIMIT`, implicit 24).
- * Filtru `niche_type`: comparare case-insensitive cu lista din `PG_VECTOR_ALLOWED_NICHES`.
+ * Filtru mall: coloana **`niche_type`** (nu `niche_id` în schema curentă). Cu `activeMallNiche` din UI se impune egalitate strictă; altfel `= ANY` cu lista din `PG_VECTOR_ALLOWED_NICHES`.
  */
 export class PostgresCatalogReader implements CatalogReader {
   private readonly pool: Pool;
 
   constructor(pool?: Pool) {
-    this.pool = pool ?? new Pool(buildPgPoolConfig());
+    this.pool = pool ?? new Pool(buildAppPgPoolConfig({ max: 8 }));
   }
 
   /** OpenAI: text → vector (text-embedding-3-small, 1536 dim). */
@@ -175,7 +178,7 @@ export class PostgresCatalogReader implements CatalogReader {
     const rows = res.rows.map((r) => pgRowToCatalogProductRow(r as Record<string, unknown>));
     const parsed = rows.map(rowToParsedProduct);
     const deduped = dedupeParsedProductsBySimilarTitle(parsed, LIST_PRODUCTS_MAX);
-    return applySqliteNicheSpeciesFilters(deduped, options);
+    return applyCatalogNicheSpeciesFilters(deduped, options);
   }
 
   /**
@@ -201,32 +204,26 @@ export class PostgresCatalogReader implements CatalogReader {
     }
 
     const vecLiteral = this.vectorLiteral(embedding);
-    const niches = allowedNichesForVectorSearch();
     const cols = CATALOG_PRODUCT_COLUMNS.join(", ");
 
     const restrict = options?.restrictToCategoryContains?.trim();
     const anchor = options?.speciesSqlAnchor;
 
-    const params: unknown[] = [vecLiteral, niches];
-    const wheres: string[] = [
-      "embedding IS NOT NULL",
-      "LOWER(TRIM(COALESCE(niche_type, ''))) = ANY($2::text[])",
-    ];
-    let n = 2;
+    const params: unknown[] = [vecLiteral];
+    const nichePred = appendNicheTypeSqlPredicate(params, options?.activeMallNiche);
+    const wheres: string[] = ["embedding IS NOT NULL", nichePred];
 
     if (restrict) {
-      n += 1;
       params.push(`%${restrict.toLowerCase()}%`);
-      wheres.push(`LOWER(COALESCE(category, '')) LIKE $${n}`);
+      wheres.push(`LOWER(COALESCE(category, '')) LIKE $${params.length}`);
     }
     if (anchor === "caine" || anchor === "pisica") {
       const needles = speciesDbLikeNeedles(anchor);
       const ors: string[] = [];
       for (const needle of needles) {
-        n += 1;
         params.push(`%${needle}%`);
         ors.push(
-          `(LOWER(COALESCE(name, '')) LIKE $${n} OR LOWER(COALESCE(description, '')) LIKE $${n})`
+          `(LOWER(COALESCE(name, '')) LIKE $${params.length} OR LOWER(COALESCE(description, '')) LIKE $${params.length})`
         );
       }
       wheres.push(`(${ors.join(" OR ")})`);
@@ -256,7 +253,7 @@ LIMIT ${k}
       JSON.stringify({
         rowCount: rawRowCount,
         limit: k,
-        allowedNichesLower: niches,
+        activeMallNiche: options?.activeMallNiche?.trim() || null,
         categoryRestrict: restrict ?? null,
         speciesAnchor: anchor ?? null,
         speciesNeedleCount: anchor === "caine" || anchor === "pisica" ? speciesDbLikeNeedles(anchor).length : 0,
@@ -267,7 +264,7 @@ LIMIT ${k}
 
     const mapped = res.rows.map((r) => this.mapQueryRowToParsedProduct(r as Record<string, unknown>));
     const deduped = dedupeParsedProductsBySimilarTitle(mapped, 0);
-    const afterFilters = applySqliteNicheSpeciesFilters(deduped, options);
+    const afterFilters = applyCatalogNicheSpeciesFilters(deduped, options);
     if (afterFilters.length !== deduped.length) {
       console.log(
         "[PostgresCatalogReader] after dedupe + species intent filter",
@@ -345,11 +342,23 @@ LIMIT ${k}
       speciesSql = ` AND (${parts.join(" OR ")})`;
     }
 
-    const whereSql = `${whereTokenSql}${categorySql}${speciesSql}`;
+    let nicheSql = "";
+    const nicheActive = (() => {
+      const raw = options?.activeMallNiche?.trim().toLowerCase() ?? "";
+      if (!raw) return null;
+      return allowedNichesForVectorSearch().includes(raw) ? raw : null;
+    })();
+    if (nicheActive) {
+      const pn = next();
+      nicheSql = ` AND LOWER(TRIM(COALESCE(niche_type, ''))) = LOWER(${pn}::text)`;
+    }
+
+    const whereSql = `${whereTokenSql}${categorySql}${speciesSql}${nicheSql}`;
 
     const bindArgs: unknown[] = [normQuery, normQuery, ...toks];
     if (restrict) bindArgs.push(restrict);
     for (const nd of speciesNeedles) bindArgs.push(nd);
+    if (nicheActive) bindArgs.push(nicheActive);
 
     const sql = `
 SELECT ${cols}, ${relevanceExpr} AS relevance_score
@@ -362,7 +371,7 @@ LIMIT 8000
     const res = await this.pool.query(sql, bindArgs);
     const mapped = res.rows.map((r) => this.mapQueryRowToParsedProduct(r as Record<string, unknown>));
     const deduped = dedupeParsedProductsBySimilarTitle(mapped, 0);
-    return applySqliteNicheSpeciesFilters(deduped, options);
+    return applyCatalogNicheSpeciesFilters(deduped, options);
   }
 
   /**
@@ -384,6 +393,7 @@ LIMIT 8000
 
     const opts: CatalogListOptions = {
       ...(categoryTrim ? { restrictToCategoryContains: categoryTrim } : {}),
+      ...(input.activeMallNiche?.trim() ? { activeMallNiche: input.activeMallNiche.trim() } : {}),
     };
 
     const useVector = Boolean(process.env.OPENAI_API_KEY?.trim());
@@ -401,30 +411,23 @@ LIMIT 8000
     }
 
     const vecLiteral = this.vectorLiteral(embedding);
-    const niches = allowedNichesForVectorSearch();
     const cols = CATALOG_PRODUCT_COLUMNS.join(", ");
 
-    const params: unknown[] = [vecLiteral, niches];
-    const wheres: string[] = [
-      "embedding IS NOT NULL",
-      "LOWER(TRIM(COALESCE(niche_type, ''))) = ANY($2::text[])",
-    ];
-    let n = 2;
+    const params: unknown[] = [vecLiteral];
+    const nichePred = appendNicheTypeSqlPredicate(params, input.activeMallNiche);
+    const wheres: string[] = ["embedding IS NOT NULL", nichePred];
 
     if (categoryTrim) {
-      n += 1;
       params.push(`%${categoryTrim.toLowerCase()}%`);
-      wheres.push(`LOWER(COALESCE(category, '')) LIKE $${n}`);
+      wheres.push(`LOWER(COALESCE(category, '')) LIKE $${params.length}`);
     }
     if (input.priceMin !== undefined && Number.isFinite(input.priceMin)) {
-      n += 1;
       params.push(input.priceMin);
-      wheres.push(`(${PARSED_PRICE_SQL}) >= $${n}::double precision`);
+      wheres.push(`(${PARSED_PRICE_SQL}) >= $${params.length}::double precision`);
     }
     if (input.priceMax !== undefined && Number.isFinite(input.priceMax)) {
-      n += 1;
       params.push(input.priceMax);
-      wheres.push(`(${PARSED_PRICE_SQL}) <= $${n}::double precision`);
+      wheres.push(`(${PARSED_PRICE_SQL}) <= $${params.length}::double precision`);
     }
 
     const sql = `
@@ -438,7 +441,7 @@ LIMIT ${k}
     const res = await this.pool.query(sql, params);
     const mapped = res.rows.map((r) => this.mapQueryRowToParsedProduct(r as Record<string, unknown>));
     const deduped = dedupeParsedProductsBySimilarTitle(mapped, 0);
-    return applySqliteNicheSpeciesFilters(deduped, opts);
+    return applyCatalogNicheSpeciesFilters(deduped, opts);
   }
 
   private applyPriceBoundsToParsedProducts(

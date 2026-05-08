@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_NICHES = new Set(["auto", "petshop", "it", "tech", "generic"]);
+const ALLOWED_NICHES = new Set(["auto", "petshop", "it", "tech", "generic", "bricolaj"]);
 const ALLOWED_PROVIDERS = new Set(["generic", "bravapet"]);
 
 export async function GET(_req: NextRequest) {
@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
   }
   try {
-    const feeds = listFeedConfigsWithProductCounts();
+    const feeds = await listFeedConfigsWithProductCounts();
     return NextResponse.json({ feeds });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Eroare citire feed-uri";
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     const is_active =
       body?.is_active === false || body?.is_active === 0 ? 0 : 1;
 
-    const row = insertFeedConfig({ name, url, niche, provider_id, is_active });
+    const row = await insertFeedConfig({ name, url, niche, provider_id, is_active });
     return NextResponse.json({ feed: row });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Eroare salvare";

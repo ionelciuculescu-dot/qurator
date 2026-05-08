@@ -1,10 +1,7 @@
-import Database from "better-sqlite3";
-
-import { applyCatalogDbPragmas, initCatalogDatabase } from "@/shared/db/catalog-schema-ddl";
-import { catalogSqliteFilePath } from "@/shared/db/catalog-sqlite-path";
-import { FEED_CONFIGS_TABLE } from "@/shared/sql/feed-config-queries";
+import { Pool } from "pg";
 
 import type { FeedConfigRow } from "@/ingestion/catalog/sync-feed-from-config";
+import { buildAppPgPoolConfig, requirePgEnvConfigured } from "@/lib/pgPoolConfig";
 
 export type FeedConfigWithCount = FeedConfigRow & { product_count: number };
 
@@ -16,108 +13,205 @@ function normalizeFeedRow<T extends FeedConfigRow>(r: T): T {
   };
 }
 
-function openCatalog(): Database.Database {
-  const db = new Database(catalogSqliteFilePath());
-  applyCatalogDbPragmas(db);
-  initCatalogDatabase(db);
-  return db;
+function mapPgRowWithCount(r: {
+  id: number;
+  name: string;
+  url: string;
+  niche: string;
+  provider_id: string;
+  is_active: boolean;
+  product_count: string | null;
+}): FeedConfigWithCount {
+  const product_count = parseInt(r.product_count ?? "0", 10) || 0;
+  const base = normalizeFeedRow({
+    id: r.id,
+    name: r.name ?? "",
+    url: r.url ?? "",
+    niche: r.niche ?? "auto",
+    provider_id: r.provider_id ?? "generic",
+    is_active: r.is_active ? 1 : 0,
+  });
+  return { ...base, product_count };
 }
 
-export function listFeedConfigsWithProductCounts(): FeedConfigWithCount[] {
-  const db = openCatalog();
+async function withPool<T>(fn: (pool: Pool) => Promise<T>): Promise<T> {
+  requirePgEnvConfigured();
+  const pool = new Pool(buildAppPgPoolConfig({ max: 2 }));
   try {
-    const rows = db
-      .prepare(
+    return await fn(pool);
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
+/** DDL idempotent — rulează la prima operație dacă tabelul lipsește. */
+async function ensureFeedConfigsTable(pool: Pool): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS public.feed_configs (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      url TEXT NOT NULL,
+      niche TEXT NOT NULL DEFAULT 'auto',
+      provider_id TEXT NOT NULL DEFAULT 'generic',
+      is_active BOOLEAN NOT NULL DEFAULT TRUE
+    )
+  `);
+}
+
+export async function listFeedConfigsWithProductCounts(): Promise<FeedConfigWithCount[]> {
+  return withPool(async (pool) => {
+    await ensureFeedConfigsTable(pool);
+    try {
+      const r = await pool.query<{
+        id: number;
+        name: string;
+        url: string;
+        niche: string;
+        provider_id: string;
+        is_active: boolean;
+        product_count: string | null;
+      }>(
         `SELECT f.id, f.name, f.url, f.niche, f.provider_id, f.is_active,
-          (SELECT COUNT(*) FROM products p WHERE p.feed_id = f.id) AS product_count
-         FROM ${FEED_CONFIGS_TABLE} f
+                COALESCE(pc.c, 0)::text AS product_count
+         FROM public.feed_configs f
+         LEFT JOIN (
+           SELECT provider_id, COUNT(*)::bigint AS c
+           FROM public.products
+           GROUP BY provider_id
+         ) pc ON pc.provider_id = f.provider_id
          ORDER BY f.id ASC`
-      )
-      .all() as FeedConfigWithCount[];
-    return rows.map((r) => ({
-      ...normalizeFeedRow(r),
-      product_count: Number(r.product_count ?? 0),
-    }));
-  } finally {
-    db.close();
-  }
+      );
+      return r.rows.map((row) => mapPgRowWithCount(row));
+    } catch (e) {
+      console.warn(
+        "[feed_configs] Agregare product_count eșuată (lipsește public.products?). Listez doar feed_configs.",
+        e instanceof Error ? e.message : e
+      );
+      const r = await pool.query<{
+        id: number;
+        name: string;
+        url: string;
+        niche: string;
+        provider_id: string;
+        is_active: boolean;
+      }>(
+        `SELECT id, name, url, niche, provider_id, is_active
+         FROM public.feed_configs
+         ORDER BY id ASC`
+      );
+      return r.rows.map((row) =>
+        mapPgRowWithCount({ ...row, product_count: "0" })
+      );
+    }
+  });
 }
 
-export function listActiveFeedConfigs(): FeedConfigRow[] {
-  const db = openCatalog();
-  try {
-    const rows = db
-      .prepare(
-        `SELECT id, name, url, niche, provider_id, is_active FROM ${FEED_CONFIGS_TABLE}
-         WHERE is_active = 1 ORDER BY id ASC`
-      )
-      .all() as FeedConfigRow[];
-    return rows.map((r) => normalizeFeedRow(r));
-  } finally {
-    db.close();
-  }
+export async function listActiveFeedConfigs(): Promise<FeedConfigRow[]> {
+  return withPool(async (pool) => {
+    await ensureFeedConfigsTable(pool);
+    const r = await pool.query<{
+      id: number;
+      name: string;
+      url: string;
+      niche: string;
+      provider_id: string;
+      is_active: boolean;
+    }>(
+      `SELECT id, name, url, niche, provider_id, is_active
+       FROM public.feed_configs
+       WHERE is_active = TRUE
+       ORDER BY id ASC`
+    );
+    return r.rows.map((row) =>
+      normalizeFeedRow({
+        id: row.id,
+        name: row.name,
+        url: row.url,
+        niche: row.niche,
+        provider_id: row.provider_id,
+        is_active: row.is_active ? 1 : 0,
+      })
+    );
+  });
 }
 
-export function countFeedConfigs(): number {
-  const db = openCatalog();
-  try {
-    const row = db.prepare(`SELECT COUNT(*) AS c FROM ${FEED_CONFIGS_TABLE}`).get() as { c: number };
-    return row.c;
-  } finally {
-    db.close();
-  }
+export async function countFeedConfigs(): Promise<number> {
+  return withPool(async (pool) => {
+    await ensureFeedConfigsTable(pool);
+    const r = await pool.query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM public.feed_configs`);
+    return parseInt(r.rows[0]?.c ?? "0", 10) || 0;
+  });
 }
 
-export function insertFeedConfig(input: {
+export async function insertFeedConfig(input: {
   name: string;
   url: string;
   niche: string;
   provider_id: string;
   is_active: number;
-}): FeedConfigRow {
-  const db = openCatalog();
-  try {
-    const info = db
-      .prepare(
-        `INSERT INTO ${FEED_CONFIGS_TABLE} (name, url, niche, provider_id, is_active)
-         VALUES (@name, @url, @niche, @provider_id, @is_active)`
-      )
-      .run({
-        name: input.name.trim(),
-        url: input.url.trim(),
-        niche: input.niche.trim() || "auto",
-        provider_id: (input.provider_id || "generic").trim() || "generic",
-        is_active: input.is_active ? 1 : 0,
-      });
-    const newId = Number(info.lastInsertRowid);
-    const row = db
-      .prepare(`SELECT id, name, url, niche, provider_id, is_active FROM ${FEED_CONFIGS_TABLE} WHERE id = ?`)
-      .get(newId) as FeedConfigRow | undefined;
+}): Promise<FeedConfigRow> {
+  return withPool(async (pool) => {
+    await ensureFeedConfigsTable(pool);
+    const r = await pool.query<{
+      id: number;
+      name: string;
+      url: string;
+      niche: string;
+      provider_id: string;
+      is_active: boolean;
+    }>(
+      `INSERT INTO public.feed_configs (name, url, niche, provider_id, is_active)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, url, niche, provider_id, is_active`,
+      [
+        input.name.trim(),
+        input.url.trim(),
+        input.niche.trim() || "auto",
+        (input.provider_id || "generic").trim() || "generic",
+        Boolean(input.is_active),
+      ]
+    );
+    const row = r.rows[0];
     if (!row) throw new Error("Insert feed_configs fără rând returnat");
-    return normalizeFeedRow(row);
-  } finally {
-    db.close();
-  }
+    return normalizeFeedRow({
+      id: row.id,
+      name: row.name,
+      url: row.url,
+      niche: row.niche,
+      provider_id: row.provider_id,
+      is_active: row.is_active ? 1 : 0,
+    });
+  });
 }
 
-export function deleteFeedConfig(id: number): boolean {
-  const db = openCatalog();
-  try {
-    const r = db.prepare(`DELETE FROM ${FEED_CONFIGS_TABLE} WHERE id = ?`).run(id);
-    return r.changes > 0;
-  } finally {
-    db.close();
-  }
+export async function deleteFeedConfig(id: number): Promise<boolean> {
+  return withPool(async (pool) => {
+    await ensureFeedConfigsTable(pool);
+    const r = await pool.query(`DELETE FROM public.feed_configs WHERE id = $1`, [id]);
+    return (r.rowCount ?? 0) > 0;
+  });
 }
 
-export function getFeedConfigById(id: number): FeedConfigRow | null {
-  const db = openCatalog();
-  try {
-    const row = db
-      .prepare(`SELECT id, name, url, niche, provider_id, is_active FROM ${FEED_CONFIGS_TABLE} WHERE id = ?`)
-      .get(id) as FeedConfigRow | undefined;
-    return row ? normalizeFeedRow(row) : null;
-  } finally {
-    db.close();
-  }
+export async function getFeedConfigById(id: number): Promise<FeedConfigRow | null> {
+  return withPool(async (pool) => {
+    await ensureFeedConfigsTable(pool);
+    const r = await pool.query<{
+      id: number;
+      name: string;
+      url: string;
+      niche: string;
+      provider_id: string;
+      is_active: boolean;
+    }>(`SELECT id, name, url, niche, provider_id, is_active FROM public.feed_configs WHERE id = $1`, [id]);
+    const row = r.rows[0];
+    if (!row) return null;
+    return normalizeFeedRow({
+      id: row.id,
+      name: row.name,
+      url: row.url,
+      niche: row.niche,
+      provider_id: row.provider_id,
+      is_active: row.is_active ? 1 : 0,
+    });
+  });
 }
