@@ -73,11 +73,11 @@ export default function Home() {
 
   return (
     <>
-        <div className="flex min-h-dvh flex-col bg-[#f5f5f7] text-neutral-900 antialiased">
+        <div className="flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden bg-[#f5f5f7] text-neutral-900 antialiased">
           <DashboardHeader onNewChat={handleNewChat} />
 
-          <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-3 px-3 pb-3 pt-2 lg:grid lg:grid-cols-10 lg:gap-4 lg:px-4 lg:pb-4">
-            <section className="flex min-h-0 shrink-0 flex-col max-lg:h-[min(52dvh,480px)] lg:col-span-4 lg:h-[calc(100vh-4rem)] lg:max-h-[calc(100vh-4rem)]">
+          <main className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-3 overflow-hidden px-3 pb-3 pt-2 lg:grid lg:grid-cols-10 lg:gap-4 lg:px-4 lg:pb-4">
+            <section className="flex min-h-0 shrink-0 flex-col max-lg:h-[min(52dvh,480px)] lg:col-span-4 lg:h-[calc(100dvh-4rem)] lg:max-h-[calc(100dvh-4rem)]">
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-white ring-1 ring-black/[0.04]">
                 <Chat
                   key={chatSessionKey}
@@ -88,12 +88,12 @@ export default function Home() {
               </div>
             </section>
 
-            <aside className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-white ring-1 ring-black/[0.04] lg:col-span-6 lg:h-[calc(100vh-4rem)] lg:max-h-[calc(100vh-4rem)] lg:flex-none">
+            <aside className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-black/[0.06] bg-white ring-1 ring-black/[0.04] lg:col-span-6 lg:h-[calc(100dvh-4rem)] lg:max-h-[calc(100dvh-4rem)] lg:flex-none">
               <div className="shrink-0 border-b border-black/[0.05] px-4 py-3">
                 <h2 className="text-[13px] font-semibold uppercase tracking-wide text-neutral-500">Vitrină</h2>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 lg:overflow-y-auto">
+              <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-y-contain px-4 py-4 [-webkit-overflow-scrolling:touch] lg:overflow-y-auto">
                 {currentProducts.length === 0 ? (
                   <VitrinaEmptyState />
                 ) : (
