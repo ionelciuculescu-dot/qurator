@@ -21,6 +21,7 @@ import { cleanParsedProductForLLM } from "@/sales/lib/cleanProductForLLM";
 import { embedPlainProdusRefsWithClickThrough } from "@/sales/lib/clickThroughLinks";
 import { assignUniqueProductShortIds } from "@/sales/lib/productShortId";
 import { executeSearchStockTool } from "./execute-search-stock-tool";
+import { stripVitrinaUnifiedLeakFromReply } from "./strip-vitrina-leak";
 
 const MAX_TOOL_ROUNDS = 8;
 /** Mesaje user+assistant trimise înapoi la model (fără system / fără mesajul curent). */
@@ -328,7 +329,12 @@ export async function handleChatAgenticFromParsed(
     const noProducts = latestProducts.length === 0;
     const shortIds = noProducts ? [] : shortIdsForProductList(latestProducts);
     const contextProducts = noProducts ? undefined : toChatProductCards(latestProducts, shortIds);
-    let replyOut = noProducts && reply.length === 0 ? CATALOG_STALE_MESSAGE : reply;
+    let replyOut = stripVitrinaUnifiedLeakFromReply(reply);
+    if (replyOut.length === 0) {
+      replyOut = noProducts
+        ? CATALOG_STALE_MESSAGE
+        : "Iată recomandările în vitrină — spune-mi dacă vrei să rafinăm căutarea.";
+    }
     if (contextProducts && contextProducts.length > 0) {
       replyOut = embedPlainProdusRefsWithClickThrough(replyOut, contextProducts);
     }

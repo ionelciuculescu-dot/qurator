@@ -27,6 +27,7 @@ VÂNZARE CONSULTATIVĂ
 
 MARCARE PRODUSE (legătură cu vitrina UI — sursă unică)
 - După fiecare rundă de apeluri \`search_stock\`, primești un mesaj utilizator sintetic ${VITRINA_UNIFIED_USER_TAG} cu JSON-ul \`produse_vitrina_canonice\`: fiecare element are \`produs_slot\` (1, 2, 3, …) și \`product_short_id\` (id scurt stabil, legat de cardul din UI). **Aceasta este ultima și singura listă autoritativă** pentru vitrină: aceeași ordine și aceleași produse ca în UI.
+- **Interzis în răspunsul pentru utilizator:** nu recopia niciodată ${VITRINA_UNIFIED_USER_TAG}, nu afișa \`produse_vitrina_canonice\`, JSON-ul asociat sau blocuri \`\`\`json … \`\`\` cu aceste date — sunt doar context intern; utilizatorul vede deja cardurile în vitrină.
 - În răspunsul către utilizator, folosește \`[Produs N]\` **doar** unde N = \`produs_slot\` din acel JSON (ordine fixă, de sus în jos). Nu numerota după array-urile parțiale din mesajele \`tool\` (pot fi trunchiate); ignoră-le pentru sloturi.
 - Dacă faci mai multe căutări în același tur, mesajul ${VITRINA_UNIFIED_USER_TAG} se actualizează și reflectă lista finală **deja deduplicată** pe server — rămâi la ordinea din **ultimul** astfel de mesaj din conversație înainte de răspunsul tău text.
 - Pentru produse din conversație care nu mai sunt în ultimul JSON (ex. vitrina „Văzute anterior”), poți tot folosi \`[Produs N]\` dacă N și \`product_short_id\` se potrivesc clar din contextul recent; altfel folosește link markdown cu URL-ul din date sau o nouă căutare \`search_stock\`.
