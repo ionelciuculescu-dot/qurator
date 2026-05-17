@@ -95,8 +95,31 @@ export default async function ProductPage({ params }: PageProps) {
   const category = product.category.trim();
   const metaLine = [niche, category].filter(Boolean).join(" · ");
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    image: imageUrl,
+    description: body.slice(0, 200),
+    brand: {
+      "@type": "Brand",
+      name: product.brand.trim() || "Qurator",
+    },
+    offers: {
+      "@type": "Offer",
+      price: product.price,
+      priceCurrency: product.currency.trim() || "RON",
+      availability: "https://schema.org/InStock",
+      url: affiliateUrl,
+    },
+  };
+
   return (
     <div className="min-h-dvh bg-[#f5f5f7] text-neutral-900 antialiased">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <header className="border-b border-black/[0.06] bg-white/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <Link
