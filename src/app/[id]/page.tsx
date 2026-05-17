@@ -6,7 +6,6 @@ import {
   getProductByIdOrExternalId,
   type PublicProductPage,
 } from "@/lib/feedConfigsDb";
-import { isUsableProductImageUrl } from "@/shared/lib/product-image-url";
 
 export const revalidate = 86_400;
 
@@ -85,9 +84,7 @@ export default async function ProductPage({ params }: PageProps) {
   const title = product.name.trim() || "Produs";
   const body = semanticDescription(product);
   const affiliateUrl = product.affiliate_url?.trim() ?? "";
-  const rawImageUrl = product.image_url?.trim() ?? "";
-  const showImage = isUsableProductImageUrl(rawImageUrl);
-  const imageUrl = showImage ? rawImageUrl : "";
+  const imageUrl = product.image_url?.trim() ?? "";
   const niche = product.niche_type.trim();
   const category = product.category.trim();
   const metaLine = [niche, category].filter(Boolean).join(" · ");
@@ -96,7 +93,7 @@ export default async function ProductPage({ params }: PageProps) {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
-    ...(showImage && imageUrl ? { image: imageUrl } : {}),
+    ...(imageUrl ? { image: imageUrl } : {}),
     description: body.slice(0, 200),
     brand: {
       "@type": "Brand",
@@ -133,17 +130,14 @@ export default async function ProductPage({ params }: PageProps) {
 
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
         <article className="overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-black/[0.06]">
-          {showImage ? (
-            <div className="relative aspect-square w-full bg-neutral-50 sm:aspect-[4/3]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imageUrl}
-                alt={title}
-                decoding="async"
-                fetchPriority="high"
-                className="absolute inset-0 h-full w-full object-contain p-6 sm:p-10"
-              />
-            </div>
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt={title}
+              className="w-full h-auto object-cover"
+              referrerPolicy="no-referrer"
+            />
           ) : null}
 
           <div className="space-y-6 p-6 sm:p-10">
