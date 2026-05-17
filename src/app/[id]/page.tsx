@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -78,10 +77,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-function isRemoteImage(src: string): boolean {
-  return /^https?:\/\//i.test(src.trim());
-}
-
 export default async function ProductPage({ params }: PageProps) {
   const { id } = await params;
   const product = await loadProduct(id);
@@ -140,14 +135,13 @@ export default async function ProductPage({ params }: PageProps) {
         <article className="overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-black/[0.06]">
           {showImage ? (
             <div className="relative aspect-square w-full bg-neutral-50 sm:aspect-[4/3]">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={imageUrl}
                 alt={title}
-                fill
-                priority
-                sizes="(max-width: 768px) 100vw, 768px"
-                className="object-contain p-6 sm:p-10"
-                unoptimized={isRemoteImage(imageUrl)}
+                decoding="async"
+                fetchPriority="high"
+                className="absolute inset-0 h-full w-full object-contain p-6 sm:p-10"
               />
             </div>
           ) : null}
