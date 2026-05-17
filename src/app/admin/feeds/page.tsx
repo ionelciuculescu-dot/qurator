@@ -28,7 +28,7 @@ type FeedRow = {
   product_count: number;
 };
 
-type FeedsPayload = { feeds: FeedRow[] };
+type FeedsPayload = { feeds: FeedRow[]; total_products: number };
 
 type GranularStats = {
   scanEssentials: number;
@@ -76,7 +76,11 @@ async function feedsFetcher(url: string): Promise<FeedsPayload> {
   const data = (await res.json().catch(() => ({}))) as FeedsPayload & { error?: string };
   if (res.status === 401) throw new Error("UNAUTHORIZED");
   if (!res.ok) throw new Error(data.error ?? "Eroare feed-uri");
-  return { feeds: Array.isArray(data.feeds) ? data.feeds : [] };
+  const total_products =
+    typeof data.total_products === "number" && Number.isFinite(data.total_products)
+      ? data.total_products
+      : 0;
+  return { feeds: Array.isArray(data.feeds) ? data.feeds : [], total_products };
 }
 
 export default function AdminFeedsPage() {
@@ -424,6 +428,7 @@ export default function AdminFeedsPage() {
   };
 
   const feeds = feedsData?.feeds ?? [];
+  const totalProducts = feedsData?.total_products ?? 0;
 
   if (authorized === null) {
     return (
@@ -661,6 +666,22 @@ export default function AdminFeedsPage() {
           </div>
         )}
 
+        {feedsData !== undefined && (
+          <p className="text-sm font-medium text-zinc-200">
+            Total produse în Postgres:{" "}
+            <span className="tabular-nums text-violet-200">{totalProducts}</span>
+          </p>
+        )}
+
+        {feeds.length === 0 && totalProducts > 0 && (
+          <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90">
+            Există {totalProducts} produse în <code className="text-amber-200/80">public.products</code>, dar
+            niciun magazin în <code className="text-amber-200/80">public.feed_configs</code>. Adaugă magazinele
+            din formularul de mai sus (URL-ul poate fi doar referință; nu e nevoie de{" "}
+            <code className="text-amber-200/80">CATALOG_FEED_URLS</code> în mediu).
+          </p>
+        )}
+
         <section className={`overflow-hidden ${glassCardClass()}`}>
           <div className="border-b border-white/[0.08] px-5 py-4">
             <h2 className="text-sm font-semibold text-white">Magazine configurate</h2>
@@ -689,7 +710,9 @@ export default function AdminFeedsPage() {
                 {feeds.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-10 text-center text-zinc-500">
-                      Niciun magazin salvat. Completează formularul de mai sus.
+                      {totalProducts > 0
+                        ? "Niciun magazin în feed_configs — vezi avertismentul de mai sus."
+                        : "Niciun magazin salvat. Completează formularul de mai sus."}
                     </td>
                   </tr>
                 ) : (

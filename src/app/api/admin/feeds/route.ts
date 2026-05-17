@@ -1,5 +1,9 @@
 import { verifyAdminRequest } from "@/lib/adminAuth";
-import { insertFeedConfig, listFeedConfigsWithProductCounts } from "@/lib/feedConfigsDb";
+import {
+  countAllProducts,
+  insertFeedConfig,
+  listFeedConfigsWithProductCounts,
+} from "@/lib/feedConfigsDb";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +16,11 @@ export async function GET(_req: NextRequest) {
     return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
   }
   try {
-    const feeds = await listFeedConfigsWithProductCounts();
-    return NextResponse.json({ feeds });
+    const [feeds, total_products] = await Promise.all([
+      listFeedConfigsWithProductCounts(),
+      countAllProducts(),
+    ]);
+    return NextResponse.json({ feeds, total_products });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Eroare citire feed-uri";
     return NextResponse.json({ error: message }, { status: 500 });

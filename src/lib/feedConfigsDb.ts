@@ -143,6 +143,13 @@ export async function countFeedConfigs(): Promise<number> {
   });
 }
 
+export async function countAllProducts(): Promise<number> {
+  return withPool(async (pool) => {
+    const r = await pool.query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM public.products`);
+    return parseInt(r.rows[0]?.c ?? "0", 10) || 0;
+  });
+}
+
 export async function insertFeedConfig(input: {
   name: string;
   url: string;
