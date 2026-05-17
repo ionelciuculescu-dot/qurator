@@ -2,6 +2,7 @@ import { Pool } from "pg";
 
 import type { FeedConfigRow } from "@/ingestion/catalog/sync-feed-from-config";
 import { buildAppPgPoolConfig, requirePgEnvConfigured } from "@/lib/pgPoolConfig";
+import { pathSegmentToLookupKeys } from "@/shared/lib/product-url-slug";
 
 export type FeedConfigWithCount = FeedConfigRow & { product_count: number };
 
@@ -172,21 +173,21 @@ export type PublicProductPage = {
   updated_at: Date | null;
 };
 
-/** Pagină publică produs: potrivire după `external_id` sau `id` (text). */
+/** Pagină publică produs: potrivire după `external_id` sau `id` (text / slug URL). */
 export async function getProductByIdOrExternalId(
   idOrExternalId: string
 ): Promise<PublicProductPage | null> {
-  const key = idOrExternalId.trim();
-  if (!key) return null;
+  const keys = pathSegmentToLookupKeys(idOrExternalId);
+  if (keys.length === 0) return null;
   return withPool(async (pool) => {
     const r = await pool.query<PublicProductPage>(
       `SELECT id::text AS id, external_id, name, brand, price, currency,
               niche_type, category, description, description_clean,
               image_url, affiliate_url, updated_at
        FROM public.products
-       WHERE external_id = $1 OR id::text = $1
+       WHERE external_id = ANY($1::text[]) OR id::text = ANY($1::text[])
        LIMIT 1`,
-      [key]
+      [keys]
     );
     return r.rows[0] ?? null;
   });

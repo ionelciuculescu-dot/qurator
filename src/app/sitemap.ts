@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import { listProductsForSitemap } from "@/lib/feedConfigsDb";
+import { externalIdToPathSegment } from "@/shared/lib/product-url-slug";
 
 const BASE_URL = "https://qurator.expert";
 
@@ -27,7 +28,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const rows = await listProductsForSitemap();
 
   const productPages: MetadataRoute.Sitemap = rows.map((row) => ({
-    url: `${BASE_URL}/${encodeURIComponent(productSegment(row))}`,
+    url: `${BASE_URL}/${externalIdToPathSegment(productSegment(row))}`,
     lastModified: row.updated_at ?? now,
     changeFrequency: "daily",
     priority: 0.8,

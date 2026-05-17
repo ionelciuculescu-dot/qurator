@@ -44,13 +44,7 @@ function metaTitle(product: PublicProductPage): string {
 }
 
 async function loadProduct(idParam: string): Promise<PublicProductPage | null> {
-  let decoded = idParam;
-  try {
-    decoded = decodeURIComponent(idParam);
-  } catch {
-    decoded = idParam;
-  }
-  return getProductByIdOrExternalId(decoded);
+  return getProductByIdOrExternalId(idParam);
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
