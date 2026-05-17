@@ -150,6 +150,72 @@ export async function countAllProducts(): Promise<number> {
   });
 }
 
+export type ProductSitemapRow = {
+  id: string;
+  external_id: string | null;
+  updated_at: Date | null;
+};
+
+export type PublicProductPage = {
+  id: string;
+  external_id: string | null;
+  name: string;
+  brand: string;
+  price: string;
+  currency: string;
+  niche_type: string;
+  category: string;
+  description: string;
+  description_clean: string | null;
+  image_url: string;
+  affiliate_url: string;
+  updated_at: Date | null;
+};
+
+/** Pagină publică produs: potrivire după `external_id` sau `id` (text). */
+export async function getProductByIdOrExternalId(
+  idOrExternalId: string
+): Promise<PublicProductPage | null> {
+  const key = idOrExternalId.trim();
+  if (!key) return null;
+  return withPool(async (pool) => {
+    const r = await pool.query<PublicProductPage>(
+      `SELECT id::text AS id, external_id, name, brand, price, currency,
+              niche_type, category, description, description_clean,
+              image_url, affiliate_url, updated_at
+       FROM public.products
+       WHERE external_id = $1 OR id::text = $1
+       LIMIT 1`,
+      [key]
+    );
+    return r.rows[0] ?? null;
+  });
+}
+
+/** Rânduri pentru `app/sitemap.ts` (identificator: external_id sau id numeric). */
+export async function listProductsForSitemap(): Promise<ProductSitemapRow[]> {
+  return withPool(async (pool) => {
+    try {
+      const r = await pool.query<{
+        id: string;
+        external_id: string | null;
+        updated_at: Date | null;
+      }>(
+        `SELECT id::text AS id, external_id, updated_at
+         FROM public.products
+         ORDER BY updated_at DESC`
+      );
+      return r.rows;
+    } catch (e) {
+      console.warn(
+        "[sitemap] listProductsForSitemap eșuat:",
+        e instanceof Error ? e.message : e
+      );
+      return [];
+    }
+  });
+}
+
 export async function insertFeedConfig(input: {
   name: string;
   url: string;
