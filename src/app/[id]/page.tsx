@@ -7,10 +7,10 @@ import {
   getProductByIdOrExternalId,
   type PublicProductPage,
 } from "@/lib/feedConfigsDb";
+import { isUsableProductImageUrl } from "@/shared/lib/product-image-url";
 
 export const revalidate = 86_400;
 
-const PLACEHOLDER_SRC = "/product-placeholder-petshop.svg";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -90,7 +90,9 @@ export default async function ProductPage({ params }: PageProps) {
   const title = product.name.trim() || "Produs";
   const body = semanticDescription(product);
   const affiliateUrl = product.affiliate_url?.trim() ?? "";
-  const imageUrl = product.image_url?.trim() || PLACEHOLDER_SRC;
+  const rawImageUrl = product.image_url?.trim() ?? "";
+  const showImage = isUsableProductImageUrl(rawImageUrl);
+  const imageUrl = showImage ? rawImageUrl : "";
   const niche = product.niche_type.trim();
   const category = product.category.trim();
   const metaLine = [niche, category].filter(Boolean).join(" · ");
@@ -99,7 +101,7 @@ export default async function ProductPage({ params }: PageProps) {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
-    image: imageUrl,
+    ...(showImage && imageUrl ? { image: imageUrl } : {}),
     description: body.slice(0, 200),
     brand: {
       "@type": "Brand",
@@ -136,17 +138,19 @@ export default async function ProductPage({ params }: PageProps) {
 
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
         <article className="overflow-hidden rounded-3xl bg-white shadow-lg ring-1 ring-black/[0.06]">
-          <div className="relative aspect-square w-full bg-neutral-50 sm:aspect-[4/3]">
-            <Image
-              src={imageUrl}
-              alt={title}
-              fill
-              priority
-              sizes="(max-width: 768px) 100vw, 768px"
-              className="object-contain p-6 sm:p-10"
-              unoptimized={isRemoteImage(imageUrl)}
-            />
-          </div>
+          {showImage ? (
+            <div className="relative aspect-square w-full bg-neutral-50 sm:aspect-[4/3]">
+              <Image
+                src={imageUrl}
+                alt={title}
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 768px"
+                className="object-contain p-6 sm:p-10"
+                unoptimized={isRemoteImage(imageUrl)}
+              />
+            </div>
+          ) : null}
 
           <div className="space-y-6 p-6 sm:p-10">
             {metaLine ? (

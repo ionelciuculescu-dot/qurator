@@ -11,6 +11,7 @@ import type {
   ParsedProduct,
   StreamEssentialsResult,
 } from "@/shared/models/product";
+import { firstImageUrlFromField } from "@/shared/lib/product-image-url";
 
 /** Limite pentru consum de memorie sub ~100MB chiar la feed-uri foarte mari. */
 const MAX_LEAF_CHARS = 65536;
@@ -119,17 +120,11 @@ function fieldFromFlat(f: Record<string, string>, localName: string): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-/** Prima imagine din `<image_urls>` (liste separate prin virgulă / spațiu). */
+/** Prima imagine din `<image_urls>` (liste: virgulă / ; / | / rând nou — nu spațiu în path). */
 function imageUrlFromImageUrlsField(f: Record<string, string>): string {
   const raw = fieldFromFlat(f, "image_urls");
   if (!raw) return "";
-  const tokens = raw
-    .split(/[,;|\n\r\t\s]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  const httpFirst = tokens.find((t) => /^https?:\/\//i.test(t));
-  const u = httpFirst ?? tokens[0] ?? "";
-  return cap(u, MAX_IMAGE_URL);
+  return firstImageUrlFromField(raw);
 }
 
 export function essentialFromFlat(flat: Record<string, string>): EssentialProduct | null {
@@ -209,13 +204,7 @@ function firstImageFromFlat(f: Record<string, string>): string {
   if (strict) return strict;
   const raw = pickFirst(f, ["images", "imageurls", "image_link", "g:image_link", "image", "thumbnail"]);
   if (!raw) return "";
-  const tokens = raw
-    .split(/[,;|\n\r\t\s]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  const httpFirst = tokens.find((t) => /^https?:\/\//i.test(t));
-  const u = httpFirst ?? tokens[0] ?? "";
-  return cap(u, MAX_IMAGE_URL);
+  return firstImageUrlFromField(raw);
 }
 
 export function parsedProductFromFlat(flat: Record<string, string>): ParsedProduct {

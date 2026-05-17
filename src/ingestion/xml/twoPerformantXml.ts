@@ -2,6 +2,7 @@ import { XMLParser } from "fast-xml-parser";
 
 import type { ParsedProduct, StreamEssentialsResult } from "@/shared/models/product";
 import { MAX_PRODUCTS, STORE_FEED_AI_LIMIT } from "@/shared/constants/limits";
+import { firstImageUrlFromField } from "@/shared/lib/product-image-url";
 
 export type { ParsedProduct, StreamEssentialsResult } from "@/shared/models/product";
 export { STORE_FEED_AI_LIMIT } from "@/shared/constants/limits";
@@ -256,12 +257,7 @@ function firstImageFromImagesField(item: Record<string, unknown>): string {
     );
   }
   if (!raw) return "";
-  const tokens = raw
-    .split(/[,;|\n\r\t\s]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  const httpFirst = tokens.find((t) => /^https?:\/\//i.test(t));
-  return httpFirst ?? tokens[0] ?? "";
+  return firstImageUrlFromField(raw);
 }
 
 /**

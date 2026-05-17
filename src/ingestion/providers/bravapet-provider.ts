@@ -3,7 +3,6 @@ import type { EssentialProduct } from "@/shared/models/product";
 import { streamFeedUrlToSupabase } from "@/ingestion/catalog/stream-to-supabase";
 import {
   MAX_DESCRIPTION_OUT,
-  MAX_IMAGE_URL,
   cap,
   flattenKeys,
   normalizePriceFromFlat,
@@ -11,6 +10,7 @@ import {
   parseInStock,
   pickFirst,
 } from "@/ingestion/xml/twoPerformantXmlStream";
+import { firstImageUrlFromField } from "@/shared/lib/product-image-url";
 
 import { BaseFeedProvider } from "./base-provider";
 
@@ -62,15 +62,7 @@ export function essentialFromBravapetProductFlat(flat: Record<string, string>): 
 
   if (!title || !affiliateLink) return null;
 
-  let image = "";
-  if (imageUrlsRaw) {
-    const tokens = imageUrlsRaw
-      .split(/[,;|\n\r\t\s]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    const httpFirst = tokens.find((t) => /^https?:\/\//i.test(t));
-    image = cap(httpFirst ?? tokens[0] ?? "", MAX_IMAGE_URL);
-  }
+  const image = imageUrlsRaw ? firstImageUrlFromField(imageUrlsRaw) : "";
 
   const description = descriptionRaw ? cap(descriptionRaw, MAX_DESCRIPTION_OUT) : "";
 
